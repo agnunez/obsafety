@@ -1,3 +1,11 @@
+/**************************
+ * obsafety
+ * 
+ * Driver for an Observatory Safety conditions device
+ * Based on ESP32
+ * (c) agnuca 2023
+ * 
+ */
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
