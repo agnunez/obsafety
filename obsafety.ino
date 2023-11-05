@@ -15,16 +15,14 @@
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 
-
-// Set reference sea-level preassure to calculate Altitud
-#define SEALEVELPRESSURE_HPA (1013.25)
-
-// Pins at SDA=22 SCL=21. Change them as required
-#define SDApin 22
+#define DEBUG true
+#define SDApin 22     // Pins at SDA=22 SCL=21. Change them as required
 #define SCLpin 21
-
-Adafruit_BME280 bme; // I2C
+Adafruit_BME280 bme;  // I2C
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+unsigned long measureDelay = 5000;   // Sensors read cycle in ms. Always greater than 3000
+unsigned long lastTimeRan;
 
 WebServer server(80);
 
@@ -34,9 +32,7 @@ float pressure;
 float tempamb;
 float tempobj;
 
-// REST API server configuration
-
-StaticJsonDocument<1024> jsonDocument;
+StaticJsonDocument<1024> jsonDocument;  // REST API server configuration
 
 char buffer[1024];
 
@@ -67,7 +63,7 @@ void addJsonObject(char *name, float value, char *unit) {
 }
 
 void getValues() {
-  Serial.println("Get all values");
+  if(DEBUG) Serial.println("Get all values");
   jsonDocument.clear(); // Clear json buffer
   addJsonObject("temperature", temperature, "°C");
   addJsonObject("humidity", humidity, "%");
@@ -80,8 +76,8 @@ void getValues() {
 }
 
 void homePage() {
-  Serial.println("home page");
-  server.send(200, "application/json", "<html><body><h2>Obsafety Web</h2>Please GET from ip/getValues or POST to ip/setValues</body></html>");
+  if(DEBUG) Serial.println("home page");
+  server.send(200, "text/html", "<html><body><h2>Obsafety Web</h2>Please use:<ul><li>GET ip/json<li>POST ip/set</ul></body></html>");
 }
 
 void setupApi() {   // REST API
@@ -91,28 +87,17 @@ void setupApi() {   // REST API
   server.begin();
 }
 
-// Timer for sensor reading cycle
-
-hw_timer_t *Timer0 = NULL;
-bool sensors_ready_flag = false;
-
-void IRAM_ATTR Timer0_ISR(){
-  sensors_ready_flag = true;
-}
-
 void readSensors(){
   temperature = bme.readTemperature();
   humidity    = bme.readHumidity();
   pressure    = bme.readPressure();
   tempamb     = mlx.readAmbientTempC();
   tempobj     = mlx.readObjectTempC(); 
-
-  sensors_ready_flag = false;
 }
 
 void setup() {
   Serial.begin(115200); 
-  Serial.println("Init");  
+  if(DEBUG) Serial.println("Init");  
   delay(1500);                 // wait for Serial Monitor
   Wire.end();                  // Set I2C pinout
   Wire.setPins(SDApin,SCLpin);  
@@ -122,33 +107,17 @@ void setup() {
   WiFiManager wm;              // Wifi initiate in AP if no STA mode credential exist
   //wm.resetSettings();        // clear credentials for development testing
   bool res;
-  res = wm.autoConnect("AutoConnectAP");
-  if(!res) {
-        Serial.println("Failed to connect");
-        // ESP.restart();
-    } 
-    else {
-        //if you get here you have connected to the WiFi    
-        Serial.println("connected...yeey :)");
-    }
+  res = wm.autoConnect("obsafetyAP");
+  if(res) Serial.println("connected!"); //if you get here you have connected to the WiFi    
   setupApi();                  // start REST API
-  
-  // Assign ISR to timer and execute ISR every 1s
-/*
-  Timer0 = timerBegin(0, 80, true); // pre-scaler 8000, true count up
-  timerAttachInterrupt(Timer0, &Timer0_ISR, true);
-  timerAlarmWrite(Timer0, 5000000, true);
-  timerAlarmEnable(Timer0);
-*/
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   server.handleClient();
-  //if(sensors_ready_flag == true){
+  if (millis() > lastTimeRan + measureDelay)  {   // read every measureDelay without blocking Webserver
     readSensors();
-  //}
-  delay(1000);
+    lastTimeRan = millis();
+  }
 }
 
 void printMLX(){
@@ -171,7 +140,7 @@ void printBME() {
     Serial.print(bme.readPressure() / 100.0F);
     Serial.println(" hPa");
     Serial.print("Approx. Altitude = ");
-    Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+    Serial.print(bme.readAltitude(1013.25));
     Serial.println(" m");
     Serial.print("Humidity = ");
     Serial.print(bme.readHumidity());
