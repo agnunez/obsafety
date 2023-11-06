@@ -32,6 +32,12 @@ float pressure;
 float tempamb;
 float tempobj;
 
+// limits
+
+float limit_tamb = 0;
+float limit_tsky = -15;
+float limit_humid = 85;
+
 StaticJsonDocument<1024> jsonDocument;  // REST API server configuration
 
 char buffer[1024];
@@ -42,7 +48,7 @@ void handlePost() {
   }
   String body = server.arg("plain");
   deserializeJson(jsonDocument, body);
-
+  limit_tsky = jsonDocument["limit_tsky"];
   // Respond to the client
   server.send(200, "application/json", "{}");
 }
@@ -75,17 +81,34 @@ void getValues() {
   server.send(200, "application/json", buffer);
 }
 
+const char index_html[] PROGMEM = R"rawliteral(
+<html><body>
+<h2>Obsafety Web</h2>
+Please use:
+<ul>
+<li>GET ip/json
+<li>POST ip/set
+</ul></body></html>
+)rawliteral";
+
 void homePage() {
   if(DEBUG) Serial.println("home page");
-  server.send(200, "text/html", "<html><body><h2>Obsafety Web</h2>Please use:<ul><li>GET ip/json<li>POST ip/set</ul></body></html>");
+  //server.send(200, "text/html", "<html><body><h2>Obsafety Web</h2>Please use:<ul><li>GET ip/json<li>POST ip/set</ul></body></html>");
+  server.send(200, "text/html", index_html);
+}
+
+void handle_NotFound(){
+  server.send(404, "text/plain", "Page Not found");
 }
 
 void setupApi() {   // REST API
   server.on("/", homePage);
   server.on("/json", getValues);
   server.on("/set", HTTP_POST, handlePost);
+  server.onNotFound(handle_NotFound);
   server.begin();
 }
+
 
 void readSensors(){
   temperature = bme.readTemperature();
@@ -116,6 +139,7 @@ void loop() {
   server.handleClient();
   if (millis() > lastTimeRan + measureDelay)  {   // read every measureDelay without blocking Webserver
     readSensors();
+    if(DEBUG) printBME();
     lastTimeRan = millis();
   }
 }
