@@ -113,9 +113,9 @@ void setupApi() {   // REST API
 void readSensors(){
   temperature = bme.readTemperature();
   humidity    = bme.readHumidity();
-  pressure    = bme.readPressure();
+  pressure    = bme.readPressure()/ 100.0F;
   tempamb     = mlx.readAmbientTempC();
-  tempobj     = mlx.readObjectTempC(); 
+  tempobj     = mlx.readObjectTempC();
 }
 
 void setup() {
