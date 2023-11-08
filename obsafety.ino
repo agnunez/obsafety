@@ -40,7 +40,7 @@ float limit_humid = 85;
 
 StaticJsonDocument<1024> jsonDocument;  // REST API server configuration
 
-char buffer[1024];
+String json_str = "";
 
 void handlePost() {
   if (server.hasArg("plain") == false) {
@@ -53,42 +53,73 @@ void handlePost() {
   server.send(200, "application/json", "{}");
 }
 
-void createJson(char *name, float value, char *unit) {  
-  jsonDocument.clear();
-  jsonDocument["name"] = name;
-  jsonDocument["value"] = value;
-  jsonDocument["unit"] = unit;
-  serializeJson(jsonDocument, buffer);  
-}
- 
-void addJsonObject(char *name, float value, char *unit) {
-  JsonObject obj = jsonDocument.createNestedObject();
-  obj["name"] = name;
-  obj["value"] = value;
-  obj["unit"] = unit; 
+void addJsonObject(char *name, float value, char *unit, bool comma) {
+  json_str += "{ \"name\": \"";
+  json_str += name;
+  json_str += "\", \"value\": \"";
+  json_str += value;
+  json_str += "\", \"unit\": \"";
+  json_str += unit;
+  json_str += "\" }";
+  if(comma) json_str += ", ";  
 }
 
 void getValues() {
   if(DEBUG) Serial.println("Get all values");
-  jsonDocument.clear(); // Clear json buffer
-  addJsonObject("temperature", temperature, "°C");
-  addJsonObject("humidity", humidity, "%");
-  addJsonObject("pressure", pressure, "hPa");
-  addJsonObject("tempamb", tempamb, "°C");
-  addJsonObject("tempobj", tempobj, "°C");
-
-  serializeJson(jsonDocument, buffer);
-  server.send(200, "application/json", buffer);
+  json_str ="";
+  addJsonObject("temperature", temperature, "°C", true);
+  addJsonObject("humidity", humidity, "%", true);
+  addJsonObject("pressure", pressure, "hPa", true);
+  addJsonObject("tempamb", tempamb, "°C", true);
+  addJsonObject("tempobj", tempobj, "°C", false);
+  String sensors = "{ \"sensors\": [" + json_str + "] }";
+  server.send(200, "application/json", sensors);
 }
 
 const char index_html[] PROGMEM = R"rawliteral(
-<html><body>
-<h2>Obsafety Web</h2>
-Please use:
-<ul>
-<li>GET ip/json
-<li>POST ip/set
-</ul></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Observatory Safety Data</h1>
+    <table border=1 id="myTable" class="table table-striped table-earning">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Value</th>
+            <th>Units</th>
+          </tr>
+        </thead>
+        <tbody id="testBody"></tbody>
+    </table>
+    <script>
+        const table = document.getElementById("testBody");
+        setInterval(update, 5000);
+        function update(){
+           console.log("timer event")
+            fetch('/json')
+                .then((response) => response.json())
+                .then((data) => renderData(data.sensors));
+        };
+        function renderData(datos){
+            table.innerHTML="";
+            datos.forEach(sensor => {
+                let row = table.insertRow();
+                let name = row.insertCell(0);
+                name.innerHTML = sensor.name;
+                let value = row.insertCell(1);
+                value.innerHTML = sensor.value;
+                let unit = row.insertCell(2);
+                unit.innerHTML = sensor.unit;
+            });
+        }
+    </script>
+</body>
+</html> 
 )rawliteral";
 
 void homePage() {
@@ -102,6 +133,7 @@ void handle_NotFound(){
 }
 
 void setupApi() {   // REST API
+  server.enableCORS();  
   server.on("/", homePage);
   server.on("/json", getValues);
   server.on("/set", HTTP_POST, handlePost);
