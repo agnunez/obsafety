@@ -119,7 +119,9 @@ void handlePost() {
   }
   String body = server.arg("plain");
   deserializeJson(jsonDocument, body);
-  limit_tsky = jsonDocument["limit_tsky"];
+  limit_tsky  = jsonDocument["limit_tsky"];
+  limit_humid = jsonDocument["limit_humid"];
+  limit_tamb = jsonDocument["limit_tamb"];
   // Respond to the client
   server.send(200, "application/json", "{}");
 }
@@ -151,6 +153,9 @@ void getValues() {
   addJsonObject("Humidity Safety", status_humid, "Boolean", true);
   addJsonObject("Dew Safety", status_dew, "Boolean", true);
   addJsonObject("Weather Overall Safety", status_weather, "Boolean", true);
+  addJsonObject("Cloud Temp Limit", limit_tsky, "°C", true);  
+  addJsonObject("Humidity Limit", limit_humid, "%", true);  
+  addJsonObject("Freezing Temp Limit", limit_tamb, "°C", true);  
   addJsonObject("Time to open roof", time2open, "sec", true);
   addJsonObject("Time to close roof", time2close, "sec", false);
   String sensors = "{ \"sensors\": [" + json_str + "] }";
@@ -177,6 +182,21 @@ const char index_html[] PROGMEM = R"rawliteral(
         </thead>
         <tbody id="testBody"></tbody>
     </table>
+    <form action="/set" method="post" id="configure-form">
+      <label for="limit_tsky">
+        <strong>CloudTemp Limit:</strong>
+        <input type="text" name="limit_tsky" id="limit_tsky" size="2">
+      </label><br />
+      <label for="limit_tsky">
+        <strong>Freezing Limit:</strong>
+        <input type="text" name="limit_tamb" id="limit_tamb" size="2">
+      </label><br />
+      <label for="limit_humid">
+        <strong>Humidity Limit:</strong>
+        <input type="text" name="limit_humid" id="limit_humid" size="2">
+      </label><br />
+      <input type="submit" value="Update configuration">
+    </form>
     <script>
         const table = document.getElementById("testBody");
         setInterval(update, 5000);
@@ -197,6 +217,31 @@ const char index_html[] PROGMEM = R"rawliteral(
                 let unit = row.insertCell(2);
                 unit.innerHTML = sensor.unit;
             });
+        }
+        const exampleForm = document.getElementById("configure-form");  
+        exampleForm.addEventListener("submit", handleFormSubmit);
+        async function handleFormSubmit(event) {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const url = form.action;
+          try{
+            const formData = new FormData(form);
+            const responseData = await postFormDataAsJson({ url, formData });
+            console.log({ responseData });
+          } catch (error) {
+            console.error(error);
+          }
+        }
+        async function postFormDataAsJson({ url, formData }){
+          const plainFormData = Object.fromEntries(formData.entries());
+          const formDataJsonString = JSON.stringify(plainFormData);
+          const fetchOptions = { method: "POST", headers: {"Content-Type": "application/json", "Accept": "application/json"}, body: formDataJsonString };
+          const response = await fetch(url, fetchOptions);
+          if (!response.ok) {
+            const errorMessage = await response.text();
+            throw new Error(errorMessage);
+          }
+          return response.json();
         }
     </script>
 </body>
