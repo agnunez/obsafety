@@ -32,13 +32,7 @@ WebServer server(80);
 
 // temperature calculations
 
-float temperature;
-float humidity;
-float pressure;
-float tempamb;
-float tempobj;
-float tempsky;
-float dewpoint;
+float temperature, humidity, pressure, tempamb, tempobj, tempsky, noise_db, dewpoint;
 float limit_tamb = 0;     // freezing below this
 float limit_tsky = -15;   // cloudy above this
 float limit_humid = 85;   // risk for electronics above this
@@ -49,6 +43,54 @@ float time2close = 120;   // waiting time before close roof with continuos overa
 bool  status_tamb, status_tsky, status_humid, status_dew, status_weather, status_roof;
 
 #define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0))          // missing math function sign of number
+
+// Circular buffer functions
+#define CB_SIZE 24
+float cb[CB_SIZE] = {0.};
+float cb_noise[CB_SIZE] = {0.};
+int   cb_index     = 0;
+float cb_avg       = 0.0;
+float cb_rms       = 0.0;
+
+float cb_avg_calc(){
+  int sum = 0;
+  for (int i = 0; i < CB_SIZE; i++) sum += cb[i];
+  return ((float) sum) / CB_SIZE;
+}
+
+float cb_rms_calc(){
+  int sum = 0;
+  for (int i = 0; i < CB_SIZE; i++) sum += cb[i]*cb[i];
+  return sqrt(sum/CB_SIZE);
+}
+
+void cb_add(float value){
+  cb[cb_index] = value;
+  cb_avg = cb_avg_calc();
+  cb_rms = cb_rms_calc();
+  cb_noise[cb_index] = abs(value)-cb_rms;    
+  cb_index++;
+  if (cb_index == CB_SIZE) cb_index = 0;
+}
+
+float cb_noise_db_calc(){
+  float s,n = 0;
+  for (int i = 0; i < CB_SIZE; i++){
+    n += cb_noise[i]*cb_noise[i];
+  }
+  if (n == 0) return 0;
+  return (10*log10(n));
+}
+
+float cb_snr_calc(){
+  float s,n = 0;
+  for (int i = 0; i < CB_SIZE; i++){
+    s += cb[i]*cb[i];
+    n += cb_noise[i]*cb_noise[i];
+  }
+  if (n == 0) return 0;
+  return (10*log10(s/n));
+}
 
 static float k[] = {0., 33., 0., 4., 100., 100., 0., 0.};  // sky temperature corrections polynomial coefficients
 
@@ -102,6 +144,7 @@ void getValues() {
   addJsonObject("MLX temp ", tempamb, "°C", true);
   addJsonObject("IR temp", tempobj, "°C", true);
   addJsonObject("Sky Temp", tempsky, "°C", true);
+  addJsonObject("Turbulence", noise_db, "dB", true);
   addJsonObject("Dew Point", dewpoint, "°C", true);
   addJsonObject("Temperature Safety", status_tamb, "Boolean", true);
   addJsonObject("Cloud Safety", status_tsky, "Boolean", true);
@@ -187,7 +230,10 @@ void readSensors(){
   tempamb     = mlx.readAmbientTempC();
   tempobj     = mlx.readObjectTempC();
   tempsky     = tsky_calc(tempobj, tempamb);
+  cb_add(tempsky);   // add tempsky value to circular buffer and calculate  Turbulence (noise dB) / Seeing estimation
+  noise_db    = cb_noise_db_calc();
   dewpoint    = dewpoint_calc(temperature, humidity);
+  
 // RULES    status true means SAFE!  false means UNSAFE!
   if (tempamb > limit_tamb){
     status_tamb = true;
