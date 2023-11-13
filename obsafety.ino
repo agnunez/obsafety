@@ -35,7 +35,7 @@ WebServer server(80);
 float temperature, humidity, pressure, tempamb, tempobj, tempsky, noise_db, dewpoint;
 float limit_tamb = 0;     // freezing below this
 float limit_tsky = -15;   // cloudy above this
-float limit_humid = 85;   // risk for electronics above this
+float limit_humid = 90;   // risk for electronics above this
 float limit_dew = 5;      // risk for optics with temp - dewpoint below this
 float time2open = 1200;   // waiting time before open roof after a safety close
 float time2close = 120;   // waiting time before close roof with continuos overall safety waring for this
@@ -180,25 +180,25 @@ const char index_html[] PROGMEM = R"rawliteral(
             <th>Units</th>
           </tr>
         </thead>
-        <tbody id="testBody"></tbody>
+        <tbody id="htmlBody"></tbody>
     </table>
     <form action="/set" method="post" id="configure-form">
       <label for="limit_tsky">
         <strong>CloudTemp Limit:</strong>
-        <input type="text" name="limit_tsky" id="limit_tsky" size="2">
+        <input type="text" name="limit_tsky" id="limit_tsky" size="2" value="-15">
       </label><br />
-      <label for="limit_tsky">
+      <label for="limit_tamb">
         <strong>Freezing Limit:</strong>
-        <input type="text" name="limit_tamb" id="limit_tamb" size="2">
+        <input type="text" name="limit_tamb" id="limit_tamb" size="2" value="0">
       </label><br />
       <label for="limit_humid">
         <strong>Humidity Limit:</strong>
-        <input type="text" name="limit_humid" id="limit_humid" size="2">
+        <input type="text" name="limit_humid" id="limit_humid" size="2" value="90">
       </label><br />
       <input type="submit" value="Update configuration">
     </form>
     <script>
-        const table = document.getElementById("testBody");
+        const table = document.getElementById("htmlBody");
         setInterval(update, 5000);
         function update(){
            console.log("timer event")
@@ -218,8 +218,8 @@ const char index_html[] PROGMEM = R"rawliteral(
                 unit.innerHTML = sensor.unit;
             });
         }
-        const exampleForm = document.getElementById("configure-form");  
-        exampleForm.addEventListener("submit", handleFormSubmit);
+        const configureForm = document.getElementById("configure-form");  
+        configureForm.addEventListener("submit", handleFormSubmit);
         async function handleFormSubmit(event) {
           event.preventDefault();
           const form = event.currentTarget;
@@ -250,7 +250,6 @@ const char index_html[] PROGMEM = R"rawliteral(
 
 void homePage() {
   if(DEBUG) Serial.println("home page");
-  //server.send(200, "text/html", "<html><body><h2>Obsafety Web</h2>Please use:<ul><li>GET ip/json<li>POST ip/set</ul></body></html>");
   server.send(200, "text/html", index_html);
 }
 
