@@ -19,9 +19,10 @@
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
 
-#define DEBUG true
+#define DEBUG false
 #define SDApin 22     // Pins at SDA=22 SCL=21. Change them as required
 #define SCLpin 21
+#define ROOFpin 4     // Relay to control Roof open/close
 Adafruit_BME280 bme;  // I2C
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 
@@ -33,14 +34,15 @@ WebServer server(80);
 // temperature calculations
 
 float temperature, humidity, pressure, tempamb, tempobj, tempsky, noise_db, dewpoint;
-float limit_tamb = 0;     // freezing below this
-float limit_tsky = -15;   // cloudy above this
-float limit_humid = 90;   // risk for electronics above this
-float limit_dew = 5;      // risk for optics with temp - dewpoint below this
-float time2open = 1200;   // waiting time before open roof after a safety close
-float time2close = 120;   // waiting time before close roof with continuos overall safety waring for this
+float limit_tamb = 0.;     // freezing below this
+float limit_tsky = -15.;   // cloudy above this
+float limit_humid = 90.;   // risk for electronics above this
+float limit_dew = 5.;      // risk for optics with temp - dewpoint below this
+float delay2open = 1200.;   // waiting time before open roof after a safety close
+float delay2close = 120.;   // waiting time before close roof with continuos overall safety waring for this
+float time2open, time2close;
 
-bool  status_tamb, status_tsky, status_humid, status_dew, status_weather, status_roof;
+bool  status_tamb, status_tsky, status_humid, status_dew, status_weather, instant_status, status_roof;
 
 #define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0))          // missing math function sign of number
 
@@ -74,7 +76,7 @@ void cb_add(float value){
 }
 
 float cb_noise_db_calc(){
-  float s,n = 0;
+  float n = 0;
   for (int i = 0; i < CB_SIZE; i++){
     n += cb_noise[i]*cb_noise[i];
   }
@@ -122,6 +124,7 @@ void handlePost() {
   limit_tsky  = jsonDocument["limit_tsky"];
   limit_humid = jsonDocument["limit_humid"];
   limit_tamb = jsonDocument["limit_tamb"];
+  limit_dew = jsonDocument["limit_dew"];
   // Respond to the client
   server.send(200, "application/json", "{}");
 }
@@ -152,10 +155,13 @@ void getValues() {
   addJsonObject("Cloud Safety", status_tsky, "Boolean", true);
   addJsonObject("Humidity Safety", status_humid, "Boolean", true);
   addJsonObject("Dew Safety", status_dew, "Boolean", true);
-  addJsonObject("Weather Overall Safety", status_weather, "Boolean", true);
+  addJsonObject("Instant Safety", instant_status, "Boolean", true);
+  addJsonObject("Weather Condition", status_weather, "Boolean", true);  
   addJsonObject("Cloud Temp Limit", limit_tsky, "°C", true);  
   addJsonObject("Humidity Limit", limit_humid, "%", true);  
-  addJsonObject("Freezing Temp Limit", limit_tamb, "°C", true);  
+  addJsonObject("Freezing Temp Limit", limit_tamb, "°C", true);
+  addJsonObject("Dew Limit", limit_dew, "°C", true);
+  addJsonObject("Roof Status", status_roof, "Boolean", true);
   addJsonObject("Time to open roof", time2open, "sec", true);
   addJsonObject("Time to close roof", time2close, "sec", false);
   String sensors = "{ \"sensors\": [" + json_str + "] }";
@@ -194,6 +200,10 @@ const char index_html[] PROGMEM = R"rawliteral(
       <label for="limit_humid">
         <strong>Humidity Limit:</strong>
         <input type="text" name="limit_humid" id="limit_humid" size="2" value="90">
+      </label><br />
+      <label for="limit_dew">
+        <strong>Dew Limit:</strong>
+        <input type="text" name="limit_dew" id="limit_dew" size="2" value="5">
       </label><br />
       <input type="submit" value="Update configuration">
     </form>
@@ -299,20 +309,43 @@ void readSensors(){
   }else{
     status_dew = false;    
   }
-  if (status_tamb && status_humid && status_tsky){
-    status_weather = true;
-    time2close = 125;
+  if (status_tamb && status_humid && status_tsky && status_dew){
+    instant_status = true;
   }else{
-    status_weather = false;
-    time2open = 1205;
+    instant_status = false;
   }
-  time2open -= measureDelay;
-  if (time2open < 0) time2open = 0;
-  time2close -= measureDelay;
-  if (time2close < 0) time2close = 0;
+  if (instant_status == false){
+    if (status_weather == true) Serial.println("Unsafe received");
+    time2open = delay2open;
+    status_weather = false;
+    if (status_roof == true){
+      if (time2close == 0.) {
+        status_roof = false;
+        Serial.println("Close Roofs");
+        digitalWrite(ROOFpin, LOW);
+      }
+    }
+  }
+  if (instant_status == true){
+    if (status_weather == false) Serial.println("Safe received");
+    time2close = delay2close;
+    status_weather = true;
+    if (status_roof == false){
+      if (time2open == 0.) {
+        status_roof = true;
+        Serial.println("Open Roofs");
+        digitalWrite(ROOFpin, HIGH);
+      }
+    }
+  }
+  time2open -= measureDelay/1000;
+  if (time2open < 0.) time2open = 0;
+  time2close -= measureDelay/1000;
+  if (time2close < 0.) time2close = 0;
 }
 
 void setup() {
+  pinMode(ROOFpin,OUTPUT);
   Serial.begin(115200); 
   if(DEBUG) Serial.println("Init");  
   delay(1500);                 // wait for Serial Monitor
@@ -334,7 +367,5 @@ void loop() {
   if (millis() > lastTimeRan + measureDelay)  {   // read every measureDelay without blocking Webserver
     readSensors();
     lastTimeRan = millis();
-    if (time2open > 0) time2open -= measureDelay;
-    if (time2close > 0) time2close -= measureDelay;
   }
 }
