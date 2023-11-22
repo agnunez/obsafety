@@ -10,7 +10,7 @@
  *
  */
 
-After installing the software, look for ESP32 access point SSID with cellular phone and, after connection, open browser
+After installing the software, look for ESP32 access point "<bold>obsafetyAP</bold>" SSID with cellular phone and, after connection, open browser
 at http://192.168.4.1, to browse ESP32 IP configuration. Choose in that page your local Wifi Network SSID and password, and
 look at the Arduino IDE serial monitor for new ESP32 ip in your LAN. 
 
