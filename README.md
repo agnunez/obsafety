@@ -17,5 +17,8 @@ look at the Arduino IDE serial monitor for new ESP32 ip in your LAN.
 Then, open http://youresp32lanip/ and after 5 seconds, a table with all the data will appear, with a form below to allow 
 safety limits configuration. The table will refresh every 5s. Change limits at wish and submit.
  
-Simple connection schema usign ESP32 WROOM 32, BME280 breakout board and MLX90614 
+Simple connection schema usign ESP32 WROOM 32, BME280 breakout board and MLX90614-BAA (*)
 
+<img src="https://github.com/agnunez/obsafety/blob/master/obsafety_schema.jpg">
+
+(*) use BAA 3v version. AAA is 5v version and needs level shifters)
